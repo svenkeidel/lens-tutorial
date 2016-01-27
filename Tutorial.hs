@@ -33,17 +33,18 @@ hug = Meetup
      }
  }
  
-hug
 
 mapLongitudeOfMeetup :: (Longitude -> Longitude) -> (Meetup -> Meetup)
 mapLongitudeOfMeetup f meetup =
-    meetup { location = (location meetup) { longitude = f (longitude (location meetup)) } }
+    meetup { location =
+              (location meetup) { longitude = 
+                  f (longitude (location meetup)) } }
 
 mapLongitudeOfMeetup (+1) hug
 
 mapLocation :: (Location -> Location) -> (Meetup -> Meetup)
 mapLocation f meetup =
-    meetup { location = f (location meetup)}
+    meetup { location = f (location meetup) }
 
 mapLongitude :: (Longitude -> Longitude) -> (Location -> Location)
 mapLongitude f loc = loc { longitude = f (longitude loc) }
@@ -61,36 +62,43 @@ compose (+1) hug
 -- (.) :: ((Location -> Location) -> (Meetup -> Meetup))
 --     -> ((Longitude -> Longitude) -> (Location -> Location))
 --     -> ((Longitude -> Longitude) -> (Meetup -> Meetup))
+:t fmap
 
 mapLocation' :: Functor f => (Location -> f Location) -> (Meetup -> f Meetup)
-mapLocation' f meetup = fmap (\loc -> meetup { location = loc }) (f (location meetup))
+mapLocation' g meetup = fmap (\loc -> meetup { location = loc }) (g (location meetup))
 
-mapLangitude' :: Functor f => (Longitude -> f Longitude) -> (Location -> f Location)
-mapLangitude' f loc = fmap (\long -> loc { longitude = long }) (f (longitude loc))
+mapLongitude' :: Functor f => (Longitude -> f Longitude) -> (Location -> f Location)
+mapLongitude' f loc = fmap (\long -> loc { longitude = long }) (f (longitude loc))
 
-(mapLocation' . mapLangitude') (\l -> print l >> return (l+1)) hug
+:t (mapLocation' . mapLongitude')
 
-type Lens s t a b = forall f. Functor f => (a -> f b) -> (s -> f b)
+(mapLocation' . mapLongitude') (\l -> print l >> return (l+1)) hug
+
+type Lens s t a b = forall f. Functor f => (a -> f b) -> (s -> f t)
+type Lens' s a = Lens s s a a
+
 type Setter s t a b = (a -> Identity b) -> s -> Identity t
 
+-- set :: Setter' Meetup Location -> Location -> Meetup -> Meetup
 set :: Setter s t a b -> b -> s -> t
-set lens b s = runIdentity $ lens (\_ -> Identity b) s
+set setter b s = runIdentity $ setter (\_ -> Identity b) s 
 
-set (mapLocation' . mapLangitude') 42 hug
+set (mapLocation' . mapLongitude') 42 hug
 
-set (L.mapped . mapLocation' . mapLangitude') 42 (Just hug)
+set (L.mapped . mapLocation' . mapLongitude') 42 (Just hug)
 
-hug & (mapLocation' . mapLangitude') +~ 1
-hug & (mapLocation' . mapLangitude') -~ 1
-hug & (mapLocation' . mapLangitude') *~ 2
+hug & (mapLocation' . mapLongitude') +~ 1
+hug & (mapLocation' . mapLongitude') -~ 1
+hug & (mapLocation' . mapLongitude') *~ 2
 
 type Getting r s a = (a -> Constant r a) -> (s -> Constant r s)
 
 get :: Getting a s a -> s -> a
-get lens s = getConstant $ lens (\a -> Constant a) s
+get getter s = getConstant $ getter (\a -> Constant a) s
 
-get (mapLocation' . mapLangitude') hug
-get (mapLocation' . mapLangitude' . L.to getLongitude) hug
+
+get (mapLocation' . mapLongitude') hug
+get (mapLocation' . mapLongitude' . L.to getLongitude) hug
 
 get (L.at 2) (M.fromList [(1,'a'), (2,'b'), (3,'c')])
 set (L.at 2) (Just 'c') (M.fromList [(1,'a'), (2,'b'), (3,'c')])
@@ -101,6 +109,7 @@ mapLongLat f loc = Location <$> fmap Latitude (f (getLatitude (latitude loc)))
                             <*> fmap Longitude (f (getLongitude (longitude loc)))
 
 set (mapLocation' . mapLongLat) 4 hug
+get (mapLocation' . mapLongLat) hug
 
 foldMapOf :: Getting r s a -> (a -> r) -> s -> r
 foldMapOf lens f s = getConstant $ lens (Constant . f) s
